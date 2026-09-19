@@ -64,20 +64,14 @@ export function ArtifactPanel({
   const bump = (d: number) => setPage((p) => Math.max(0, Math.min(total - 1, p + d)));
 
   const download = () => {
-    const blob = new Blob(
-      [
-        artifact.markdown ||
-          artifact.pages?.map((p) => `${p.name} (${p.latin})\n${p.about}\n`).join("\n\n") ||
-          artifact.title,
-      ],
-      { type: "text/plain" }
-    );
+    const value = artifact.imageSvg || artifact.markdown || artifact.pages?.map((p) => `${p.name} (${p.latin})\n${p.about}\n`).join("\n\n") || artifact.title;
+    const blob = new Blob([value], { type: artifact.imageSvg ? "image/svg+xml" : "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = artifact.fileName.replace(/\.pdf$/i, ".txt");
-    a.click();
-    URL.revokeObjectURL(url);
+    a.download = artifact.imageSvg ? artifact.fileName : artifact.markdown ? artifact.fileName.replace(/\.pdf$/i, ".md") : artifact.fileName.replace(/\.pdf$/i, ".txt");
+     a.click();
+     URL.revokeObjectURL(url);
   };
 
   return (
@@ -136,9 +130,12 @@ export function ArtifactPanel({
         >
           <IconExpand size={13} />
         </button>
-        <button type="button" className="ml-auto rounded p-1 hover:bg-black/5" onClick={download} aria-label="Download">
-          <IconDownload size={14} />
-        </button>
+         <button type="button" className="ml-auto rounded p-1 hover:bg-black/5" onClick={download} aria-label="Download source">
+           <IconDownload size={14} />
+         </button>
+         <button type="button" className="rounded px-2 py-1 text-[11px] text-neutral-500 hover:bg-black/5" onClick={() => window.print()}>
+           PDF
+         </button>
       </div>
 
       {showSearch && (
@@ -162,7 +159,9 @@ export function ArtifactPanel({
             width: artifact.kind === "pdf" ? `${Math.max(320, (760 * zoom) / 100)}px` : `${Math.max(320, (680 * zoom) / 100)}px`,
           }}
         >
-          {artifact.kind === "pdf" && artifact.pages ? (
+           {artifact.kind === "image" && artifact.imageSvg ? (
+             <div className="overflow-hidden rounded-sm bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.08)] ring-1 ring-black/5" dangerouslySetInnerHTML={{ __html: artifact.imageSvg }} />
+           ) : artifact.kind === "pdf" && artifact.pages ? (
             <div className="overflow-hidden rounded-sm bg-[#f4f1e8] shadow-[0_8px_30px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
               <div style={{ zoom: 1 }}>
                 <PlantPdfPage page={artifact.pages[safePage]} index={safePage} total={total} />
@@ -171,7 +170,7 @@ export function ArtifactPanel({
           ) : (
             <div className="min-h-[720px] rounded-sm bg-[#f4f1e8] px-8 py-8 shadow-[0_8px_30px_rgba(0,0,0,0.08)] ring-1 ring-black/5 sm:px-12">
               <p className="mb-6 text-[10px] font-medium tracking-[0.14em] text-[#9a9588] uppercase">
-                Gemini Workspace · {artifact.kind} · {artifact.fileName}
+                VisaMOTion AI · {artifact.kind} · {artifact.fileName}
               </p>
               <MarkdownDoc markdown={filteredMarkdown || `# ${artifact.title}\n\nNo content.`} />
             </div>

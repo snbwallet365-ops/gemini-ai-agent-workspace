@@ -5,7 +5,7 @@ export type ModelId =
   | "kimi-k2"
   | "gpt-4.1";
 
-export type ArtifactKind = "pdf" | "document" | "itinerary" | "analysis" | "code" | "website";
+export type ArtifactKind = "pdf" | "document" | "itinerary" | "analysis" | "code" | "website" | "image";
 
 export type PlantTag = {
   label: string;
@@ -62,6 +62,7 @@ export type Artifact = {
   html?: string;
   code?: string;
   language?: string;
+  imageSvg?: string;
 };
 
 export type Project = {

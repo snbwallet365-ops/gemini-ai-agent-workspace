@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactPanel } from "./components/ArtifactPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { getStoredModel } from "./components/Composer";
+import { GoogleWorkspaceModal } from "./components/GoogleWorkspaceModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar } from "./components/Sidebar";
 import { SEED_PROJECTS } from "./data/projects";
@@ -9,22 +10,50 @@ import { detectIntent, formatDuration, localAgentReply, wrapModelText } from "./
 import { runBrowserWorkflow } from "./lib/browser";
 import { APP_CONFIG } from "./lib/config";
 import { getApiKey, MODELS, streamGemini } from "./lib/gemini";
+import { connectRealtime, type RealtimeStatus } from "./lib/realtime";
+import { runVisaResearch } from "./lib/visaResearch";
 import type { ChatMessage, Project } from "./types";
+
+const PROJECTS_KEY = "visamotion.projects.v1";
+const ACTIVE_PROJECT_KEY = "visamotion.activeProject";
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+function loadProjects() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROJECTS_KEY) || "null") as Project[] | null;
+    if (Array.isArray(saved) && saved.length > 0) return saved;
+  } catch {
+    /* Use the seed workspace when local storage is unavailable. */
+  }
+  return SEED_PROJECTS;
+}
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
-  const [activeId, setActiveId] = useState(SEED_PROJECTS[0].id);
+  const [projects, setProjects] = useState<Project[]>(loadProjects);
+  const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_PROJECT_KEY) || SEED_PROJECTS[0].id);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [workspaceScanOpen, setWorkspaceScanOpen] = useState(false);
+  const [installAvailable, setInstallAvailable] = useState(false);
+  const [installNotice, setInstallNotice] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
   const [working, setWorking] = useState(false);
   const [elapsed, setElapsed] = useState("0s");
   const [draft, setDraft] = useState<ChatMessage | null>(null);
   const tick = useRef<number | null>(null);
+  const installPrompt = useRef<InstallPromptEvent | null>(null);
+  const realtime = useRef<ReturnType<typeof connectRealtime> | null>(null);
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const project = useMemo(
     () => projects.find((p) => p.id === activeId) || projects[0],
@@ -38,6 +67,39 @@ export default function App() {
     setSidebarOpen(false);
     setDraft(null);
   }, [activeId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+      localStorage.setItem(ACTIVE_PROJECT_KEY, activeId);
+    } catch {
+      /* Persistence is best-effort for private browsing. */
+    }
+  }, [projects, activeId]);
+
+  useEffect(() => {
+    realtime.current = connectRealtime({
+      room: "visamotion-ai",
+      onStatus: setRealtimeStatus,
+      onEvent: (event) => {
+        if (event.kind === "active-project" && event.projectId && projectsRef.current.some((item) => item.id === event.projectId)) {
+          setActiveId(event.projectId);
+        }
+      },
+    });
+    return () => realtime.current?.close();
+  }, []);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    const captureInstall = (event: Event) => {
+      event.preventDefault();
+      installPrompt.current = event as InstallPromptEvent;
+      setInstallAvailable(true);
+    };
+    window.addEventListener("beforeinstallprompt", captureInstall);
+    return () => window.removeEventListener("beforeinstallprompt", captureInstall);
+  }, []);
 
   const patch = (id: string, fn: (p: Project) => Project) => {
     setProjects((all) => all.map((p) => (p.id === id ? fn(p) : p)));
@@ -55,6 +117,7 @@ export default function App() {
     };
     setProjects((all) => [p, ...all]);
     setActiveId(p.id);
+    realtime.current?.send({ kind: "active-project", projectId: p.id, at: Date.now() });
     setSidebarOpen(false);
   };
 
@@ -70,6 +133,8 @@ export default function App() {
     const userMsg: ChatMessage = { id: uid("u"), role: "user", content: text, createdAt: Date.now() };
     const title = project.messages.length === 0 ? text.slice(0, 42) : project.title;
     const history = [...project.messages, userMsg];
+    const intent = detectIntent(text);
+    realtime.current?.send({ kind: "agent-request", projectId: pid, text, at: Date.now() });
 
     patch(pid, (p) => ({
       ...p,
@@ -91,8 +156,18 @@ export default function App() {
       steps: [
         { title: "Reading the brief", detail: "Extracting the deliverable and constraints." },
         {
-          title: detectIntent(text) === "browser" ? "Starting Browser Use workflow" : `Running ${MODELS.find((m) => m.id === model)?.label || model}`,
-          detail: detectIntent(text) === "browser" ? "Navigating through the configured MCP browser with an approval gate." : "Working the request as an agent, not a chatbot.",
+          title:
+            intent === "visa"
+              ? "Verifying official visa sources"
+              : intent === "browser"
+                ? "Starting Browser Use workflow"
+                : `Running ${MODELS.find((m) => m.id === model)?.label || model}`,
+          detail:
+            intent === "visa"
+              ? "Checking official immigration, embassy, consulate, and authorized VAC sources before drafting the dossier."
+              : intent === "browser"
+                ? "Navigating through the configured MCP browser with an approval gate."
+                : "Working the request as an agent, not a chatbot.",
         },
       ],
     };
@@ -100,11 +175,12 @@ export default function App() {
 
     try {
       const key = getApiKey();
-      const intent = detectIntent(text);
-      const useGemini = (Boolean(key) || Boolean(APP_CONFIG.apiBaseUrl)) && (model === "gemini-2.5-flash" || model === "gemini-2.5-pro");
+       const useGemini = (Boolean(key) || Boolean(APP_CONFIG.apiBaseUrl)) && (model === "gemini-2.5-flash" || model === "gemini-2.5-pro");
       let resultText = "";
 
-      if (intent === "browser" && APP_CONFIG.apiBaseUrl) {
+      if (intent === "visa" && APP_CONFIG.apiBaseUrl) {
+        resultText = await runVisaResearch(text);
+      } else if (intent === "browser" && APP_CONFIG.apiBaseUrl) {
         const browserResult = await runBrowserWorkflow(text);
         resultText = browserResult.liveUrl ? `${browserResult.text}\n\nLive browser view: ${browserResult.liveUrl}` : browserResult.text;
       } else if (useGemini) {
@@ -150,7 +226,9 @@ export default function App() {
       const duration = formatDuration(Date.now() - started);
       const note =
         err instanceof Error
-          ? `\n\n_Live Gemini pass failed (${err.message}). Delivered with the studio agent instead._`
+          ? intent === "visa"
+            ? `\n\n_Live official-source verification is unavailable (${err.message}). No volatile requirement was invented; the dossier marks live verification as required._`
+            : `\n\n_Live AI pass failed (${err.message}). Delivered with the local studio agent instead._`
           : "";
       const assistant: ChatMessage = {
         id: draftId,
@@ -174,6 +252,18 @@ export default function App() {
     }
   };
 
+  const installApp = async () => {
+    if (installPrompt.current) {
+      await installPrompt.current.prompt();
+      const choice = await installPrompt.current.userChoice;
+      if (choice.outcome === "accepted") setInstallAvailable(false);
+      installPrompt.current = null;
+      return;
+    }
+    setInstallNotice("Use your browser menu and choose Install VisaMOTion AI or Add to Home Screen.");
+    window.setTimeout(() => setInstallNotice(""), 5000);
+  };
+
   return (
     <div className="flex h-dvh items-stretch justify-center bg-[#cfcfcf] p-0 sm:p-3 lg:p-4">
       <div className="relative flex h-full w-full max-w-[1680px] overflow-hidden bg-white font-sans shadow-[0_20px_60px_rgba(0,0,0,0.18)] ring-1 ring-black/10 sm:rounded-[12px]">
@@ -188,6 +278,14 @@ export default function App() {
             onNew={newProject}
             onSettings={() => setSettingsOpen(true)}
             onCloseMobile={() => setSidebarOpen(false)}
+            onScanWorkspace={() => setWorkspaceScanOpen(true)}
+            onInstallApp={installApp}
+            onOpenVisaSkills={() => {
+              setActiveId("visa-agency-ops");
+              setSidebarOpen(false);
+            }}
+            installAvailable={installAvailable}
+            realtimeStatus={realtimeStatus}
           />
         </div>
         {sidebarOpen && (
@@ -218,6 +316,8 @@ export default function App() {
         </div>
       </div>
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {workspaceScanOpen && <GoogleWorkspaceModal onClose={() => setWorkspaceScanOpen(false)} />}
+      {installNotice && <div className="fixed right-4 bottom-4 z-40 max-w-sm rounded-xl bg-neutral-900 px-4 py-3 text-[13px] text-white shadow-xl">{installNotice}</div>}
     </div>
   );
 }

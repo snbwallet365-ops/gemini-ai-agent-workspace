@@ -192,7 +192,7 @@ export function ChatPanel({
         <div className="mx-auto max-w-[540px]">
           {empty && (
             <div className="pt-16 text-center">
-              <p className="text-[15px] text-neutral-400">Ask Gemini Workspace to research, write, or make a file.</p>
+              <p className="text-[15px] text-neutral-400">Ask VisaMOTion AI to research, write, or make a file.</p>
             </div>
           )}
           {messages.map((m, idx) => {

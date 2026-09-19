@@ -2,14 +2,14 @@ import type { ChatMessage, ModelId } from "../types";
 import { apiUrl, APP_CONFIG } from "./config";
 
 export const MODELS: { id: ModelId; label: string; hint: string; provider: "google" | "local" }[] = [
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Fast agent · default", provider: "google" },
-  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Deeper reasoning", provider: "google" },
+  { id: "gemini-2.5-flash", label: "VisaMOTion Fast", hint: "Fast agent · default", provider: "google" },
+  { id: "gemini-2.5-pro", label: "VisaMOTion Deep", hint: "Deeper reasoning", provider: "google" },
   { id: "kimi-k3-high", label: "Kimi K3 High", hint: "Long-context studio", provider: "local" },
   { id: "kimi-k2", label: "Kimi K2", hint: "Balanced", provider: "local" },
   { id: "gpt-4.1", label: "GPT-4.1", hint: "General", provider: "local" },
 ];
 
-const SYSTEM = `You are Gemini Workspace, a capable AI agent that lives inside a three-pane workspace. You do real work: research, write, plan, analyze, and produce files.
+const SYSTEM = `You are VisaMOTion AI, a capable agent that lives inside a three-pane workspace. You do real work: research, write, plan, analyze, and produce files.
 
 Style:
 - Direct, specific, calm. No filler, no "great question".
@@ -80,7 +80,7 @@ export async function streamGemini(opts: {
     throw new Error(parseGeminiError(res.status, err));
   }
 
-  if (!res.body) throw new Error("No response stream from Gemini.");
+  if (!res.body) throw new Error("No response stream from the AI provider.");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -226,10 +226,10 @@ function parseGeminiError(status: number, body: string): string {
   try {
     const j = JSON.parse(body);
     const msg = j.error?.message || body;
-    if (status === 400 && /API key/i.test(msg)) return "That Gemini API key looks invalid.";
-    if (status === 429) return "Gemini is rate-limiting right now. Try again in a moment.";
-    return msg;
+     if (status === 400 && /API key/i.test(msg)) return "That custom AI API key looks invalid.";
+     if (status === 429) return "The AI provider is rate-limiting right now. Try again in a moment.";
+     return msg;
   } catch {
-    return `Gemini request failed (${status}).`;
+    return `AI provider request failed (${status}).`;
   }
 }

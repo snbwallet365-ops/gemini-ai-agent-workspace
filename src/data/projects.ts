@@ -345,7 +345,7 @@ Most “creative GPTs” stop at adjectives. Studio Agent is graded on *shipped 
 
 ## Stack
 
-Gemini 2.5 Flash for the fast loop, a slower reasoning pass for critique, and a layout renderer for the PDF/Figma pack.`,
+ VisaMOTion Fast for the fast loop, a slower reasoning pass for critique, and a layout renderer for the PDF/Figma pack.`,
       },
     ],
     messages: [
@@ -612,7 +612,7 @@ If your agent cannot hand you a PDF, a PR, or a spreadsheet, it is a chatbot. Fi
 Hairline borders, system type, one accent blue. The 2021 glassmorphism hangover is over. Interfaces look like macOS Settings, not Dribbble shots.
 
 ## 4. On-device + flash models
-Gemini Flash-class models made “always-on agent in the sidebar” economically sane. People now expect a thinking timer, not a typing indicator.
+ Fast agent models made “always-on agent in the sidebar” economically sane. People now expect a thinking timer, not a typing indicator.
 
 ## 5. North-star metric: time-to-artifact
 Homepage bounce is the wrong number. How fast did the visitor get something they could forward to a colleague?

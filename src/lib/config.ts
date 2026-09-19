@@ -13,7 +13,8 @@ export const APP_CONFIG = {
     "https://marketplace-mcp.us-east-1.api.aws/mcp"
   ),
   browserUseMcpUrl: read("VITE_BROWSER_USE_MCP_URL"),
-  appName: read("VITE_APP_NAME", "Gemini AI Agent Workspace"),
+  googleClientId: read("VITE_GOOGLE_CLIENT_ID"),
+  appName: read("VITE_APP_NAME", "VisaMOTion AI"),
 };
 
 export function apiUrl(path: string) {

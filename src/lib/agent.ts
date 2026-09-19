@@ -1,6 +1,6 @@
 import type { AgentStep, Artifact, ChatFile, ModelId, PlantPage } from "../types";
 import { PLANT_PAGES } from "../data/plants";
-import { VISA_AGENCY_KNOWLEDGE } from "../data/visaAgency";
+import { VISA_AGENCY_KNOWLEDGE, VISA_DOSSIER_ADVISORY } from "../data/visaAgency";
 
 export type AgentResult = {
   text: string;
@@ -14,14 +14,15 @@ function uid(prefix: string) {
 }
 
 function wantsFile(q: string) {
-  return /pdf|document|report|brief|itinerary|plan|spec|deck|page|artifact|create|make|write|research|analyze|analysis/i.test(
+  return /pdf|document|report|brief|dossier|checklist|itinerary|plan|spec|deck|page|artifact|create|make|write|research|analyze|analysis/i.test(
     q
   );
 }
 
-export function detectIntent(q: string): "plants" | "travel" | "math" | "web" | "music" | "visa" | "browser" | "generic" {
+export function detectIntent(q: string): "plants" | "travel" | "math" | "web" | "music" | "visa" | "browser" | "visual" | "generic" {
   const s = q.toLowerCase();
   if (/(plant|ficus|monstera|palm|office green|north-facing|north facing)/.test(s)) return "plants";
+  if (/(image|illustration|poster|banner|graphic|thumbnail|visual)/.test(s)) return "visual";
   if (/(visa|immigration|embassy|consulate|schengen|work permit|residence permit|visa agency)/.test(s)) return "visa";
   if (/(browser|portal|fill out|log in|navigate|click|submit online|browser-use)/.test(s)) return "browser";
   if (/(flight|vacation|itinerary|trip|hotel|lisbon|porto|travel)/.test(s)) return "travel";
@@ -42,7 +43,23 @@ export function localAgentReply(userText: string, model: ModelId): AgentResult {
   if (intent === "music") return musicPack(userText);
   if (intent === "visa") return visaPack(userText);
   if (intent === "browser") return browserPack(userText);
+  if (intent === "visual") return visualPack(userText);
   return genericPack(userText, model, makeFile);
+}
+
+function visualPack(userText: string): AgentResult {
+  const artifactId = uid("art");
+  const safeText = userText.replace(/[<>&"']/g, (value) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[value] || value);
+  const imageSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="VisaMOTion generated visual"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1473ff"/><stop offset="1" stop-color="#081735"/></linearGradient></defs><rect width="1200" height="800" fill="url(#bg)"/><circle cx="970" cy="150" r="220" fill="#85c8ff" opacity=".35"/><circle cx="180" cy="720" r="310" fill="#5dffcf" opacity=".16"/><path d="M90 580C260 420 380 510 540 340s310-180 570-90" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="3"/><text x="90" y="160" fill="#fff" font-family="Arial, sans-serif" font-size="28" letter-spacing="5">VISAMOTION AI</text><text x="90" y="300" fill="#fff" font-family="Arial, sans-serif" font-size="64" font-weight="700">Visual direction</text><foreignObject x="90" y="365" width="900" height="170"><div xmlns="http://www.w3.org/1999/xhtml" style="font: 28px Arial,sans-serif;line-height:1.35;color:white">${safeText}</div></foreignObject><text x="90" y="710" fill="#d5edff" font-family="Arial, sans-serif" font-size="20">Generated locally as an editable SVG visual</text></svg>`;
+  return {
+    steps: [
+      { title: "Framed the visual brief", detail: "Converted the request into a shareable visual direction." },
+      { title: "Generated an SVG", detail: "Created a lightweight, editable image that downloads without a provider key." },
+    ],
+    text: "Generated a lightweight SVG visual from the brief. It is editable, downloadable, and printable to PDF from the preview pane.",
+    files: [{ id: uid("f"), name: "visamotion-visual.svg", kind: "SVG", artifactId }],
+    artifacts: [{ id: artifactId, kind: "image", title: "Generated visual direction", fileName: "visamotion-visual.svg", imageSvg }],
+  };
 }
 
 function visaPack(userText: string): AgentResult {
@@ -53,7 +70,7 @@ function visaPack(userText: string): AgentResult {
       { title: "Applied agency guardrails", detail: "Official sources, data minimization, no outcome promises, human approval before submission." },
       { title: "Built a case brief", detail: "Checklist, source log, missing information, and next-action gates." },
     ],
-    text: "Prepared a visa-agency case brief with a source-first checklist and a human approval gate. It is operational guidance, not legal advice or a promise of approval.",
+    text: `Prepared a visa-agency dossier template with source-first checklist rules and a human approval gate. No volatile fee, processing, photo, or document value was invented because live official-source verification is required.\n\n> **Advisory:** ${VISA_DOSSIER_ADVISORY}`,
     files: [{ id: uid("f"), name: "visa-case-brief.md", kind: "MD", artifactId }],
     artifacts: [
       {
@@ -61,7 +78,7 @@ function visaPack(userText: string): AgentResult {
         kind: "document",
         title: "Visa agency case brief",
         fileName: "visa-case-brief.md",
-        markdown: `${VISA_AGENCY_KNOWLEDGE}\n\n## Current request\n\n${userText}\n\n## Case notes\n\n- Confirm destination, nationality, legal route, and intended dates.\n- Attach official source URLs and date checked.\n- Mark every unknown before drafting a form.\n- Human approval required before any submission, payment, or sensitive upload.`,
+        markdown: `${VISA_AGENCY_KNOWLEDGE}\n\n## Current request\n\n${userText}\n\n## Live verification status\n\nLIVE VERIFICATION REQUIRED. The production path uses the configured browser agent to read official immigration, embassy, consulate, and authorized VAC sources before filling volatile fields.\n\n## Case notes\n\n- Confirm destination, nationality, legal route, and intended dates.\n- Attach official source URLs and date checked.\n- Mark every unknown before drafting a form.\n- Human approval required before any submission, payment, or sensitive upload.`,
       },
     ],
   };
@@ -204,14 +221,14 @@ function musicPack(userText: string): AgentResult {
 function genericPack(userText: string, model: ModelId, makeFile: boolean): AgentResult {
   const modelLabel =
     model === "gemini-2.5-flash"
-      ? "Gemini 2.5 Flash"
+      ? "VisaMOTion Fast"
       : model === "gemini-2.5-pro"
-        ? "Gemini 2.5 Pro"
+        ? "VisaMOTion Deep"
         : model === "kimi-k3-high"
           ? "Kimi K3 High"
           : model;
   const artifactId = uid("art");
-  const text = `Here’s a working take.\n\n**What I understood.** ${userText.trim()}\n\n**Approach.** I treated this as an agent brief, not a chat prompt: gather constraints, make something you can forward, state assumptions.\n\n**Assumptions.** If you did not name a city, budget, audience, or deadline, I used a professional default (US, mid-range, colleague-ready, this week).\n\n**Next.** Add a Gemini API key in Settings to run this on ${modelLabel} for a live model pass — or tell me the missing constraint and I will revise the artifact.`;
+  const text = `Here’s a working take.\n\n**What I understood.** ${userText.trim()}\n\n**Approach.** I treated this as an agent brief, not a chat prompt: gather constraints, make something you can forward, state assumptions.\n\n**Assumptions.** If you did not name a city, budget, audience, or deadline, I used a professional default (US, mid-range, colleague-ready, this week).\n\n**Next.** Add a custom AI API key in Settings to run this on ${modelLabel} for a live model pass — or tell me the missing constraint and I will revise the artifact.`;
 
   if (!makeFile) {
     return {
@@ -246,6 +263,21 @@ function genericPack(userText: string, model: ModelId, makeFile: boolean): Agent
 
 export function wrapModelText(text: string, userText: string): AgentResult {
   const intent = detectIntent(userText);
+  if (intent === "visual") return visualPack(userText);
+  if (intent === "visa") {
+    const artifactId = uid("art");
+    const content = text.includes(VISA_DOSSIER_ADVISORY) ? text.trim() : `${text.trim()}\n\n> **Advisory:** ${VISA_DOSSIER_ADVISORY}`;
+    return {
+      text: content,
+      steps: [
+        { title: "Verified the visa route", detail: "Used the live official-source research path before presenting volatile requirements." },
+        { title: "Mapped the dossier", detail: "Separated mandatory documents, supporting evidence, travel logistics, fees, and operational notes." },
+        { title: "Added the policy advisory", detail: "Marked authority discretion and changeable requirements for human review." },
+      ],
+      files: [{ id: uid("f"), name: "visa-dossier.md", kind: "MD", artifactId }],
+      artifacts: [{ id: artifactId, kind: "document", title: "Verified visa dossier", fileName: "visa-dossier.md", markdown: content }],
+    };
+  }
   if (intent === "browser") {
     return {
       text: text.trim(),
@@ -261,7 +293,7 @@ export function wrapModelText(text: string, userText: string): AgentResult {
   return {
     text: text.trim(),
     steps: extra?.steps || [
-      { title: "Ran Gemini 2.5 Flash", detail: "Streamed a live model pass on the brief." },
+      { title: "Ran VisaMOTion AI", detail: "Streamed a live model pass on the brief." },
       { title: "Packaged the answer", detail: "Kept the delivery note short enough to sit next to a file." },
     ],
     files: extra && wantsFile(userText) ? extra.files : extra?.files || [],

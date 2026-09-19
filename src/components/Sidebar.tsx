@@ -1,7 +1,8 @@
 import { FOLDERS } from "../data/projects";
 import type { Project } from "../types";
-import { IconCompose, IconFolder, IconGear, IconLayout, IconPlus, IconSidebar } from "./Icons";
+import { IconCloud, IconCompose, IconDownload, IconFolder, IconGear, IconLayout, IconPlus, IconSidebar } from "./Icons";
 import { APP_CONFIG, isProductionApiConfigured } from "../lib/config";
+import type { RealtimeStatus } from "../lib/realtime";
 
 export function Sidebar({
   projects,
@@ -10,6 +11,11 @@ export function Sidebar({
   onNew,
   onSettings,
   onCloseMobile,
+  onScanWorkspace,
+  onInstallApp,
+  onOpenVisaSkills,
+  installAvailable,
+  realtimeStatus,
 }: {
   projects: Project[];
   activeId: string;
@@ -17,6 +23,11 @@ export function Sidebar({
   onNew: () => void;
   onSettings: () => void;
   onCloseMobile?: () => void;
+  onScanWorkspace: () => void;
+  onInstallApp: () => void;
+  onOpenVisaSkills: () => void;
+  installAvailable: boolean;
+  realtimeStatus: RealtimeStatus;
 }) {
   return (
     <aside className="flex h-full w-[232px] shrink-0 flex-col bg-[#ececec] text-[13.5px] text-neutral-800">
@@ -40,6 +51,7 @@ export function Sidebar({
           </button>
         </div>
       </div>
+      <div className="px-4 pb-2 text-[14px] font-semibold tracking-tight text-neutral-900">VisaMOTion AI</div>
 
       <div className="px-4 pt-3 pb-1 text-[11.5px] font-medium tracking-wide text-neutral-400">Projects</div>
 
@@ -85,10 +97,38 @@ export function Sidebar({
         })}
       </div>
 
+      <div className="px-4 pt-2 pb-1 text-[11.5px] font-medium tracking-wide text-neutral-400">Workspace tools</div>
+      <div className="space-y-0.5 px-2 pb-2">
+        <button
+          type="button"
+          onClick={onScanWorkspace}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5"
+        >
+          <IconCloud size={14} className="text-neutral-500" />
+          <span>Google Workspace scan</span>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenVisaSkills}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5"
+        >
+          <IconLayout size={14} className="text-neutral-500" />
+          <span>Visa skills</span>
+        </button>
+        <button
+          type="button"
+          onClick={onInstallApp}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5"
+        >
+          <IconDownload size={14} className="text-neutral-500" />
+          <span>{installAvailable ? "Install app" : "Mobile + desktop app"}</span>
+        </button>
+      </div>
+
       <div className="mx-2 mb-1 rounded-xl border border-black/6 bg-white/50 px-3 py-2 text-[11px] text-neutral-500">
         <div className="mb-1 font-medium text-neutral-700">Live connections</div>
         <div className="flex items-center justify-between">
-          <span>Gemini agent</span>
+          <span>VisaMOTion agent</span>
           <span className={isProductionApiConfigured() ? "text-emerald-600" : "text-amber-600"}>
             {isProductionApiConfigured() ? "API" : "BYOK"}
           </span>
@@ -103,6 +143,12 @@ export function Sidebar({
           <span>Browser Use</span>
           <span className={APP_CONFIG.browserUseMcpUrl ? "text-emerald-600" : "text-neutral-400"}>
             {APP_CONFIG.browserUseMcpUrl ? "Ready" : "Server"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Live sync</span>
+          <span className={realtimeStatus === "connected" ? "text-emerald-600" : "text-neutral-400"}>
+            {realtimeStatus === "connected" ? "Connected" : realtimeStatus === "connecting" ? "Connecting" : "Offline"}
           </span>
         </div>
       </div>

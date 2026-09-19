@@ -65,6 +65,25 @@ export function MarkdownDoc({ markdown }: { markdown: string }) {
       i += 1;
       continue;
     }
+    if (line.startsWith("### ")) {
+      blocks.push(
+        <h3 key={k++} className="mt-1 text-[0.92rem] font-semibold tracking-tight text-neutral-800">
+          {line.slice(4)}
+        </h3>
+      );
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      blocks.push(
+        <blockquote key={k++} className="border-l-2 border-[#1473ff]/50 bg-[#1473ff]/5 px-3 py-2 text-[13.5px] leading-relaxed text-neutral-700">
+          {inline(line.slice(2))}
+        </blockquote>
+      );
+      i += 1;
+      continue;
+    }
 
     if (line.trim().startsWith("|")) {
       const rows: string[][] = [];

@@ -17,6 +17,22 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setTimeout(() => setSaved(false), 1400);
   };
 
+  const downloadConfigTemplate = () => {
+    const content = [
+      "# VisaMOTion AI connection template",
+      `VITE_API_BASE_URL=${APP_CONFIG.apiBaseUrl}`,
+      `VITE_GOOGLE_CLIENT_ID=${APP_CONFIG.googleClientId}`,
+      "# The custom AI key stays in this browser and is intentionally not exported.",
+      "",
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "visamotion-ai.env.example";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/25 p-3 sm:items-center" onClick={onClose}>
       <div
@@ -33,10 +49,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-5 px-5 py-5">
           <div>
             <div className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-neutral-800">
-              <IconKey size={14} /> Gemini API key
+              <IconKey size={14} /> Custom AI API key
             </div>
             <p className="mb-2 text-[12.5px] leading-relaxed text-neutral-500">
-              For a production deployment, keep Gemini credentials on the server and set <code>VITE_API_BASE_URL</code> at
+              For a production deployment, keep provider credentials on the server and set <code>VITE_API_BASE_URL</code> at
               build time. This optional key is only a local-browser fallback for previewing the workspace.
             </p>
             <input
@@ -52,7 +68,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               rel="noreferrer"
               className="mt-1.5 inline-block text-[12px] text-[#1473ff] hover:underline"
             >
-              Get a key from Google AI Studio
+              Open the API key provider
             </a>
           </div>
 
@@ -80,6 +96,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               AWS Marketplace uses its official public MCP endpoint. Browser automation stays disabled until a server-side
               Browser Use MCP endpoint is configured.
             </p>
+            <button type="button" onClick={downloadConfigTemplate} className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-neutral-700 ring-1 ring-black/8 hover:bg-black/[0.03]">
+              Download setup template
+            </button>
           </div>
 
           <div>

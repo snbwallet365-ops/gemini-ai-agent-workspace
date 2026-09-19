@@ -94,7 +94,7 @@ export function Composer({
             ref={ta}
             value={text}
             disabled={disabled}
-             placeholder="Ask Gemini Workspace to do something"
+             placeholder="Ask VisaMOTion AI to do something"
             rows={1}
             onChange={(e) => {
               setText(e.target.value);
@@ -183,4 +183,3 @@ export function Composer({
     </div>
   );
 }
-
