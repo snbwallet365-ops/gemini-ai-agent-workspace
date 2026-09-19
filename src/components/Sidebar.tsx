@@ -1,6 +1,6 @@
 import { FOLDERS } from "../data/projects";
 import type { Project } from "../types";
-import { IconCloud, IconCompose, IconDownload, IconFolder, IconGear, IconLayout, IconPlus, IconSidebar } from "./Icons";
+import { IconCloud, IconCompose, IconDocTab, IconDownload, IconFolder, IconGear, IconLayout, IconPlus, IconSidebar } from "./Icons";
 import { APP_CONFIG, isProductionApiConfigured } from "../lib/config";
 import type { RealtimeStatus } from "../lib/realtime";
 
@@ -14,6 +14,8 @@ export function Sidebar({
   onScanWorkspace,
   onInstallApp,
   onOpenVisaSkills,
+  onOpenStudio,
+  onOpenChecklist,
   installAvailable,
   realtimeStatus,
 }: {
@@ -26,6 +28,8 @@ export function Sidebar({
   onScanWorkspace: () => void;
   onInstallApp: () => void;
   onOpenVisaSkills: () => void;
+  onOpenStudio: () => void;
+  onOpenChecklist: () => void;
   installAvailable: boolean;
   realtimeStatus: RealtimeStatus;
 }) {
@@ -114,6 +118,14 @@ export function Sidebar({
         >
           <IconLayout size={14} className="text-neutral-500" />
           <span>Visa skills</span>
+        </button>
+        <button type="button" onClick={onOpenStudio} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5">
+          <IconDocTab size={14} className="text-neutral-500" />
+          <span>SOP & cover letter</span>
+        </button>
+        <button type="button" onClick={onOpenChecklist} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5">
+          <IconLayout size={14} className="text-neutral-500" />
+          <span>Visa checklist</span>
         </button>
         <button
           type="button"

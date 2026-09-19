@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactPanel } from "./components/ArtifactPanel";
+import { AccessGate } from "./components/AccessGate";
+import { AdminConsole } from "./components/AdminConsole";
 import { ChatPanel } from "./components/ChatPanel";
+import { ChecklistModal } from "./components/ChecklistModal";
+import { ClientStudioModal } from "./components/ClientStudioModal";
 import { getStoredModel } from "./components/Composer";
 import { GoogleWorkspaceModal } from "./components/GoogleWorkspaceModal";
 import { SettingsModal } from "./components/SettingsModal";
@@ -11,6 +15,7 @@ import { runBrowserWorkflow } from "./lib/browser";
 import { APP_CONFIG } from "./lib/config";
 import { getApiKey, MODELS, streamGemini } from "./lib/gemini";
 import { connectRealtime, type RealtimeStatus } from "./lib/realtime";
+import { clearSession, hasStoredSession, type AccessRole } from "./lib/auth";
 import { runVisaResearch } from "./lib/visaResearch";
 import type { ChatMessage, Project } from "./types";
 
@@ -36,13 +41,15 @@ function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export default function App() {
+function WorkspaceApp() {
   const [projects, setProjects] = useState<Project[]>(loadProjects);
   const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_PROJECT_KEY) || SEED_PROJECTS[0].id);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workspaceScanOpen, setWorkspaceScanOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const [installAvailable, setInstallAvailable] = useState(false);
   const [installNotice, setInstallNotice] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
@@ -284,6 +291,8 @@ export default function App() {
               setActiveId("visa-agency-ops");
               setSidebarOpen(false);
             }}
+            onOpenStudio={() => setStudioOpen(true)}
+            onOpenChecklist={() => setChecklistOpen(true)}
             installAvailable={installAvailable}
             realtimeStatus={realtimeStatus}
           />
@@ -317,7 +326,19 @@ export default function App() {
       </div>
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {workspaceScanOpen && <GoogleWorkspaceModal onClose={() => setWorkspaceScanOpen(false)} />}
+      {studioOpen && <ClientStudioModal onClose={() => setStudioOpen(false)} onGenerate={(prompt) => { setStudioOpen(false); void send(prompt); }} />}
+      {checklistOpen && <ChecklistModal onClose={() => setChecklistOpen(false)} />}
       {installNotice && <div className="fixed right-4 bottom-4 z-40 max-w-sm rounded-xl bg-neutral-900 px-4 py-3 text-[13px] text-white shadow-xl">{installNotice}</div>}
     </div>
   );
+}
+
+export default function App() {
+  const adminRoute = window.location.pathname.replace(/\/$/, "") === "/admin" || new URLSearchParams(window.location.search).get("admin") === "1" || window.location.hash === "#admin";
+  const role: AccessRole = adminRoute ? "admin" : "client";
+  const [unlocked, setUnlocked] = useState(() => hasStoredSession(role));
+
+  if (!unlocked) return <AccessGate role={role} onUnlock={() => setUnlocked(true)} />;
+  if (adminRoute) return <AdminConsole onLogout={() => { clearSession("admin"); setUnlocked(false); }} />;
+  return <WorkspaceApp />;
 }
