@@ -8,6 +8,18 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: CLIENT_ACCESS_PIN
+        sync: false
+      - key: ADMIN_MASTER_PIN
+        sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: BROWSER_USE_API_KEY
+        sync: false
+      - key: WHATSAPP_CLOUD_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_ID
+        sync: false
       - key: BROWSER_USE_MCP_URL
         sync: false
       - key: BROWSER_USE_MCP_TOOL

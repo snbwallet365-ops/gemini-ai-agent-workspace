@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -7,10 +8,18 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
-const geminiKey = process.env.GEMINI_API_KEY || "";
 const awsMarketplaceUrl = process.env.AWS_MARKETPLACE_MCP_URL || "https://marketplace-mcp.us-east-1.api.aws/mcp";
-const browserUseUrl = process.env.BROWSER_USE_MCP_URL || "";
 const browserUseTool = process.env.BROWSER_USE_MCP_TOOL || "run_browser_agent";
+const runtimeSecrets = {
+  primaryAiKey: process.env.GEMINI_API_KEY || "",
+  exaApiKey: process.env.EXA_API_KEY || "",
+  browserUseApiKey: process.env.BROWSER_USE_API_KEY || "",
+  browserUseUrl: process.env.BROWSER_USE_MCP_URL || "",
+  whatsappToken: process.env.WHATSAPP_CLOUD_TOKEN || "",
+  whatsappPhoneId: process.env.WHATSAPP_PHONE_ID || "",
+};
+const runtimeSettings = { clientPin: process.env.CLIENT_ACCESS_PIN || "666085", adminPin: process.env.ADMIN_MASTER_PIN || "132313", notice: "" };
+const sessions = new Map();
 
 const SYSTEM = `You are the production agent inside VisaMOTion AI. Work directly and carefully.
 You can research, write, plan, analyze, and prepare structured artifacts. For visa-agency work, use official government sources,
@@ -25,7 +34,7 @@ has explicitly approved that exact action.`;
 function headers(extra = {}) {
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     ...extra,
   };
@@ -40,6 +49,72 @@ async function body(req) {
   let value = "";
   for await (const chunk of req) value += chunk;
   return value ? JSON.parse(value) : {};
+}
+
+function sessionFor(req, role) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const session = sessions.get(token);
+  if (!session || session.expiresAt < Date.now() || session.role !== role) return null;
+  return session;
+}
+
+function requireSession(req, res, role) {
+  if (sessionFor(req, role)) return true;
+  sendJson(res, 401, { error: "Admin authentication is required." });
+  return false;
+}
+
+async function handleLogin(req, res) {
+  const input = await body(req);
+  const role = input.role === "admin" ? "admin" : "client";
+  const pin = String(input.pin || "");
+  const expected = role === "admin" ? runtimeSettings.adminPin : runtimeSettings.clientPin;
+  if (!pin || pin !== expected) return sendJson(res, 401, { error: "That access code is not correct." });
+  const token = randomUUID();
+  sessions.set(token, { role, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+  return sendJson(res, 200, { token, role });
+}
+
+function configuredStatus() {
+  return {
+    ai: Boolean(runtimeSecrets.primaryAiKey),
+    exa: Boolean(runtimeSecrets.exaApiKey),
+    browser: Boolean(runtimeSecrets.browserUseApiKey || runtimeSecrets.browserUseUrl),
+    whatsapp: Boolean(runtimeSecrets.whatsappToken && runtimeSecrets.whatsappPhoneId),
+  };
+}
+
+async function handleAdminOverview(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  let activeClients = 0;
+  for (const [token, session] of sessions) {
+    if (session.expiresAt < Date.now()) sessions.delete(token);
+    else if (session.role === "client") activeClients += 1;
+  }
+  return sendJson(res, 200, { activeClients, configured: configuredStatus(), notice: runtimeSettings.notice });
+}
+
+async function handleAdminConfig(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  const input = await body(req);
+  for (const key of Object.keys(runtimeSecrets)) {
+    if (typeof input[key] === "string" && input[key].trim()) runtimeSecrets[key] = input[key].trim();
+  }
+  return sendJson(res, 200, { stored: "server-memory", configured: configuredStatus() });
+}
+
+async function handleAdminClientPin(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  runtimeSettings.clientPin = String(Math.floor(100000 + Math.random() * 900000));
+  return sendJson(res, 200, { pin: runtimeSettings.clientPin });
+}
+
+async function handleAdminNotice(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  const input = await body(req);
+  runtimeSettings.notice = String(input.notice || "").slice(0, 1000);
+  return sendJson(res, 200, { saved: true });
 }
 
 async function mcpRequest(method, params = {}) {
@@ -86,7 +161,7 @@ async function handleMcp(req, res) {
 }
 
 async function handleGemini(req, res) {
-  if (!geminiKey) return sendJson(res, 503, { error: "GEMINI_API_KEY is not configured on the server." });
+  if (!runtimeSecrets.primaryAiKey) return sendJson(res, 503, { error: "The primary AI key is not configured on the server." });
   const input = await body(req);
   const messages = Array.isArray(input.messages) ? input.messages.slice(-12) : [];
   const contents = [...messages, { role: "user", parts: [{ text: String(input.userText || "") }] }].map((message) => ({
@@ -94,7 +169,7 @@ async function handleGemini(req, res) {
     parts: [{ text: message.content || message.parts?.[0]?.text || "" }],
   }));
   const model = input.model === "gemini-2.5-pro" ? "gemini-2.5-pro" : "gemini-2.5-flash";
-  const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`, {
+  const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(runtimeSecrets.primaryAiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }),
@@ -126,11 +201,11 @@ async function handleGemini(req, res) {
 }
 
 async function handleBrowser(req, res) {
-  if (!browserUseUrl) return sendJson(res, 503, { error: "Browser Use MCP is not configured on the server." });
+  if (!runtimeSecrets.browserUseUrl) return sendJson(res, 503, { error: "Browser Use MCP is not configured on the server." });
   const input = await body(req);
   const task = String(input.task || "").trim();
   if (!task) return sendJson(res, 400, { error: "A browser task is required." });
-  const response = await fetch(browserUseUrl, {
+  const response = await fetch(runtimeSecrets.browserUseUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" },
     body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: browserUseTool, arguments: { task } } }),
@@ -141,12 +216,12 @@ async function handleBrowser(req, res) {
 }
 
 async function handleVisaResearch(req, res) {
-  if (!browserUseUrl) return sendJson(res, 503, { error: "Live visa verification needs a configured Browser Use MCP server." });
+  if (!runtimeSecrets.browserUseUrl) return sendJson(res, 503, { error: "Live visa verification needs a configured Browser Use MCP server." });
   const input = await body(req);
   const task = String(input.task || "").trim();
   if (!task) return sendJson(res, 400, { error: "A visa research brief is required." });
   const guardedTask = `You are the live research worker for VisaMOTion AI. Research only current official immigration authorities, embassy or consulate portals, official missions, and authorized VAC sites such as VFS Global, TLScontact, or BLS International. Never use memory to invent fees, processing windows, photo dimensions, eligibility, or document rules. Return a structured visa dossier with the exact source URL beside each volatile claim, clearly separate mandatory documents from supporting evidence, show fee calculations, and end with this exact advisory: Consular authorities hold sole discretionary authority over visa issuance, interviews, and supplemental-document requests. Consular fees, visa requirements, and processing durations may change without prior notice. Stop before any login, upload, payment, declaration, or submission. User brief: ${task}`;
-  const response = await fetch(browserUseUrl, {
+  const response = await fetch(runtimeSecrets.browserUseUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" },
     body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: browserUseTool, arguments: { task: guardedTask } } }),
@@ -154,6 +229,36 @@ async function handleVisaResearch(req, res) {
   const text = await response.text();
   if (!response.ok) return sendJson(res, response.status, { error: text.slice(0, 500) });
   return sendJson(res, 200, { status: "verified", text: text || "No verified visa research was returned." });
+}
+
+async function handleExaSearch(req, res) {
+  if (!runtimeSecrets.exaApiKey) return sendJson(res, 503, { error: "Exa search is not configured on the server." });
+  const input = await body(req);
+  const query = String(input.query || "").trim();
+  if (!query) return sendJson(res, 400, { error: "A search query is required." });
+  const response = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": runtimeSecrets.exaApiKey },
+    body: JSON.stringify({ query, type: "auto", numResults: Math.min(Number(input.numResults || 8), 20), contents: { highlights: { maxCharacters: 1200 } } }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return sendJson(res, response.status, { error: result.error || "Exa search failed." });
+  return sendJson(res, 200, result);
+}
+
+async function handleWhatsAppAlert(req, res) {
+  if (!runtimeSecrets.whatsappToken || !runtimeSecrets.whatsappPhoneId) return sendJson(res, 503, { error: "WhatsApp Cloud API is not configured on the server." });
+  const input = await body(req);
+  const to = String(input.to || "").trim();
+  if (!to) return sendJson(res, 400, { error: "A WhatsApp recipient is required." });
+  const response = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(runtimeSecrets.whatsappPhoneId)}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${runtimeSecrets.whatsappToken}` },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "template", template: { name: String(input.template || "visa_slot_alert"), language: { code: String(input.language || "en_US") }, components: Array.isArray(input.components) ? input.components : [] } }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return sendJson(res, response.status, { error: result.error?.message || "WhatsApp message failed." });
+  return sendJson(res, 200, result);
 }
 
 async function handleGoogleWorkspace(req, res) {
@@ -191,12 +296,19 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
     if (req.method === "GET" && req.url === "/api/health") {
-      return sendJson(res, 200, { ok: true, service: "visamotion-ai", capabilities: { ai: Boolean(geminiKey), awsMarketplaceMcp: true, browserUseMcp: Boolean(browserUseUrl), googleWorkspace: true } });
+      return sendJson(res, 200, { ok: true, service: "visamotion-ai", capabilities: { ai: Boolean(runtimeSecrets.primaryAiKey), awsMarketplaceMcp: true, browserUseMcp: Boolean(runtimeSecrets.browserUseUrl), googleWorkspace: true } });
     }
+    if (req.method === "POST" && req.url === "/api/auth/login") return await handleLogin(req, res);
+    if (req.method === "GET" && req.url === "/api/admin/overview") return await handleAdminOverview(req, res);
+    if (req.method === "POST" && req.url === "/api/admin/config") return await handleAdminConfig(req, res);
+    if (req.method === "POST" && req.url === "/api/admin/client-pin") return await handleAdminClientPin(req, res);
+    if (req.method === "POST" && req.url === "/api/admin/notice") return await handleAdminNotice(req, res);
     if (req.method === "POST" && req.url === "/api/agent/chat") return await handleGemini(req, res);
     if (req.method === "POST" && req.url === "/api/mcp/aws-marketplace") return await handleMcp(req, res);
     if (req.method === "POST" && req.url === "/api/browser/run") return await handleBrowser(req, res);
     if (req.method === "POST" && req.url === "/api/visa/research") return await handleVisaResearch(req, res);
+    if (req.method === "POST" && req.url === "/api/search/exa") return await handleExaSearch(req, res);
+    if (req.method === "POST" && req.url === "/api/notifications/whatsapp") return await handleWhatsAppAlert(req, res);
     if (req.method === "POST" && req.url === "/api/google/workspace/scan") return await handleGoogleWorkspace(req, res);
     return serveStatic(req, res);
   } catch (error) {
