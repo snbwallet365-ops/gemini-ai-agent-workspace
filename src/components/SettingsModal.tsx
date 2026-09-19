@@ -66,7 +66,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <span>AWS Marketplace MCP</span>
-              <span className="text-emerald-600">Ready on server</span>
+              <span className={isProductionApiConfigured() ? "text-emerald-600" : "text-amber-600"}>
+                {isProductionApiConfigured() ? "Connected" : "Server route"}
+              </span>
             </div>
             <div className="mt-1 flex items-center justify-between gap-3">
               <span>Browser Use MCP</span>

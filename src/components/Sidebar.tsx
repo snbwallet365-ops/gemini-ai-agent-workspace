@@ -95,7 +95,9 @@ export function Sidebar({
         </div>
         <div className="flex items-center justify-between">
           <span>AWS MCP</span>
-          <span className="text-emerald-600">Ready</span>
+          <span className={isProductionApiConfigured() ? "text-emerald-600" : "text-amber-600"}>
+            {isProductionApiConfigured() ? "Connected" : "Server"}
+          </span>
         </div>
         <div className="flex items-center justify-between">
           <span>Browser Use</span>
