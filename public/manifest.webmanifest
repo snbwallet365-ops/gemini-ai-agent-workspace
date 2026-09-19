@@ -1,0 +1,16 @@
+{
+  "name": "VisaMOTion AI",
+  "short_name": "VisaMOTion",
+  "description": "Visa case operations, source-backed research, and guarded browser workflows.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1473ff",
+  "background_color": "#f6f6f6",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }],
+  "shortcuts": [
+    { "name": "Visa skills", "short_name": "Visa skills", "url": "/#visa-skills" },
+    { "name": "Workspace scan", "short_name": "Workspace scan", "url": "/#workspace-scan" }
+  ]
+}

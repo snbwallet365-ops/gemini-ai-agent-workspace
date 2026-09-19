@@ -12,9 +12,13 @@ const awsMarketplaceUrl = process.env.AWS_MARKETPLACE_MCP_URL || "https://market
 const browserUseUrl = process.env.BROWSER_USE_MCP_URL || "";
 const browserUseTool = process.env.BROWSER_USE_MCP_TOOL || "run_browser_agent";
 
-const SYSTEM = `You are the production agent inside Gemini AI Agent Workspace. Work directly and carefully.
+const SYSTEM = `You are the production agent inside VisaMOTion AI. Work directly and carefully.
 You can research, write, plan, analyze, and prepare structured artifacts. For visa-agency work, use official government sources,
-separate facts from assumptions, never promise an approval or outcome, protect personal data, and require human review before
+embassies, consulates, official missions, and authorized VACs. Never invent a fee, processing window, photo dimension, eligibility
+rule, or document requirement from memory. Include the exact source URL beside every volatile claim and mark missing live data as
+LIVE VERIFICATION REQUIRED. Return the Visa Dossier structure: profile, official authority, source URL, key parameters, mandatory
+documents, supporting and financial evidence, travel logistics, fee table, operational notes, and the policy-volatility advisory.
+Separate facts from assumptions, never promise an approval or outcome, protect personal data, and require human review before
 submission or payment. For browser workflows, explain what will be done and stop before irreversible actions unless the user
 has explicitly approved that exact action.`;
 
@@ -136,6 +140,36 @@ async function handleBrowser(req, res) {
   return sendJson(res, 200, { status: "completed", text: text || "Browser workflow completed." });
 }
 
+async function handleVisaResearch(req, res) {
+  if (!browserUseUrl) return sendJson(res, 503, { error: "Live visa verification needs a configured Browser Use MCP server." });
+  const input = await body(req);
+  const task = String(input.task || "").trim();
+  if (!task) return sendJson(res, 400, { error: "A visa research brief is required." });
+  const guardedTask = `You are the live research worker for VisaMOTion AI. Research only current official immigration authorities, embassy or consulate portals, official missions, and authorized VAC sites such as VFS Global, TLScontact, or BLS International. Never use memory to invent fees, processing windows, photo dimensions, eligibility, or document rules. Return a structured visa dossier with the exact source URL beside each volatile claim, clearly separate mandatory documents from supporting evidence, show fee calculations, and end with this exact advisory: Consular authorities hold sole discretionary authority over visa issuance, interviews, and supplemental-document requests. Consular fees, visa requirements, and processing durations may change without prior notice. Stop before any login, upload, payment, declaration, or submission. User brief: ${task}`;
+  const response = await fetch(browserUseUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: browserUseTool, arguments: { task: guardedTask } } }),
+  });
+  const text = await response.text();
+  if (!response.ok) return sendJson(res, response.status, { error: text.slice(0, 500) });
+  return sendJson(res, 200, { status: "verified", text: text || "No verified visa research was returned." });
+}
+
+async function handleGoogleWorkspace(req, res) {
+  const input = await body(req);
+  const accessToken = String(input.accessToken || "").trim();
+  if (!accessToken) return sendJson(res, 401, { error: "A temporary Google Workspace access token is required." });
+  const url = new URL("https://www.googleapis.com/drive/v3/files");
+  url.searchParams.set("pageSize", "25");
+  url.searchParams.set("orderBy", "modifiedTime desc");
+  url.searchParams.set("fields", "files(id,name,mimeType,modifiedTime,webViewLink)");
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return sendJson(res, response.status, { error: result.error?.message || "Google Drive scan failed." });
+  return sendJson(res, 200, { provider: "Google Drive", scannedAt: new Date().toISOString(), files: result.files || [] });
+}
+
 const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".json": "application/json" };
 
 async function serveStatic(req, res) {
@@ -157,11 +191,13 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
     if (req.method === "GET" && req.url === "/api/health") {
-      return sendJson(res, 200, { ok: true, service: "gemini-ai-agent-workspace", capabilities: { gemini: Boolean(geminiKey), awsMarketplaceMcp: true, browserUseMcp: Boolean(browserUseUrl) } });
+      return sendJson(res, 200, { ok: true, service: "visamotion-ai", capabilities: { ai: Boolean(geminiKey), awsMarketplaceMcp: true, browserUseMcp: Boolean(browserUseUrl), googleWorkspace: true } });
     }
     if (req.method === "POST" && req.url === "/api/agent/chat") return await handleGemini(req, res);
     if (req.method === "POST" && req.url === "/api/mcp/aws-marketplace") return await handleMcp(req, res);
     if (req.method === "POST" && req.url === "/api/browser/run") return await handleBrowser(req, res);
+    if (req.method === "POST" && req.url === "/api/visa/research") return await handleVisaResearch(req, res);
+    if (req.method === "POST" && req.url === "/api/google/workspace/scan") return await handleGoogleWorkspace(req, res);
     return serveStatic(req, res);
   } catch (error) {
     sendJson(res, 500, { error: error instanceof Error ? error.message : "Unexpected server error." });
