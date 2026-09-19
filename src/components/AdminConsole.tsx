@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { generateClientPin, getAdminOverview, saveAdminSettings, savePortalNotice, type AdminSettings } from "../lib/admin";
+import { generateClientPin, getAdminOverview, saveAdminOffer, saveAdminSettings, savePortalNotice, testAdminConnections, type AdminOffer, type AdminSettings } from "../lib/admin";
 import { APP_CONFIG } from "../lib/config";
 
 type Overview = {
@@ -12,6 +12,9 @@ const emptySettings: AdminSettings = {
   primaryAiKey: "",
   exaApiKey: "",
   browserUseApiKey: "",
+  browserUseUrl: "",
+  googleClientId: "",
+  awsMarketplaceUrl: "",
   whatsappToken: "",
   whatsappPhoneId: "",
 };
@@ -24,6 +27,8 @@ export function AdminConsole({ onLogout }: { onLogout: () => void }) {
   const [newPin, setNewPin] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [connectionChecks, setConnectionChecks] = useState<Record<string, string>>({});
+  const [offer, setOffer] = useState<AdminOffer>({ id: "route-review", title: "Limited offer · Initial route review", description: "One structured route and document-gap review for a new client file.", cta: "Request route review", enabled: true });
 
   const refresh = async () => {
     try {
@@ -58,6 +63,33 @@ export function AdminConsole({ onLogout }: { onLogout: () => void }) {
       setMessage("New client access code generated. Share it through a secure channel.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Client PIN generation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runConnectionTest = async () => {
+    setBusy(true);
+    try {
+      const result = await testAdminConnections();
+      setConnectionChecks(result.checks);
+      setMessage(`Connection check completed at ${new Date(result.checkedAt).toLocaleTimeString()}.`);
+      await refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Connection check failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveOffer = async () => {
+    setBusy(true);
+    try {
+      await saveAdminOffer(offer);
+      setMessage("Client limited offer saved.");
+      await refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Offer could not be saved.");
     } finally {
       setBusy(false);
     }
@@ -110,16 +142,20 @@ export function AdminConsole({ onLogout }: { onLogout: () => void }) {
                 <h2 className="text-[18px] font-semibold text-neutral-900">Secure connections</h2>
                 <p className="mt-1 text-[13px] leading-relaxed text-neutral-500">Secrets are sent only to the protected server when the production API is configured. They are never shown back in the browser.</p>
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  {field("Primary AI provider key", "primaryAiKey", "provider key")}
-                  {field("Exa search key", "exaApiKey", "exa-...")}
-                  {field("Browser Use Cloud key", "browserUseApiKey", "browser key")}
-                  {field("WhatsApp permanent token", "whatsappToken", "system token")}
-                  {field("WhatsApp phone number ID", "whatsappPhoneId", "phone ID")}
-                </div>
-                <button type="button" onClick={saveConnections} disabled={busy} className="mt-5 rounded-xl bg-[#1473ff] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50">{busy ? "Saving..." : "Save key-store"}</button>
-                <div className="mt-7 rounded-2xl border border-black/8 bg-[#f7f7f7] p-4 text-[12px] text-neutral-600">
+                   {field("Primary AI provider key", "primaryAiKey", "provider key")}
+                   {field("Exa search key", "exaApiKey", "exa-...")}
+                   {field("Browser Use Cloud key", "browserUseApiKey", "browser key")}
+                   {field("Browser Use MCP URL", "browserUseUrl", "https://.../mcp")}
+                   {field("Google OAuth client ID", "googleClientId", "...apps.googleusercontent.com")}
+                   {field("AWS Marketplace MCP URL", "awsMarketplaceUrl", "https://.../mcp")}
+                   {field("WhatsApp permanent token", "whatsappToken", "system token")}
+                   {field("WhatsApp phone number ID", "whatsappPhoneId", "phone ID")}
+                 </div>
+                 <div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={saveConnections} disabled={busy} className="rounded-xl bg-[#1473ff] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50">{busy ? "Saving..." : "Save key-store"}</button><button type="button" onClick={runConnectionTest} disabled={busy} className="rounded-xl border border-black/10 px-4 py-2.5 text-[13px] text-neutral-700 hover:bg-black/5 disabled:opacity-50">Test connections</button></div>
+                 <div className="mt-7 rounded-2xl border border-black/8 bg-[#f7f7f7] p-4 text-[12px] text-neutral-600">
                   <div className="mb-2 font-medium text-neutral-800">Connection status</div>
-                  {Object.entries({ ai: "Primary AI", exa: "Exa search", browser: "Browser Use", whatsapp: "WhatsApp Cloud" }).map(([key, label]) => <div key={key} className="flex justify-between py-1"><span>{label}</span><span className={overview.configured[key] ? "text-emerald-600" : "text-neutral-400"}>{overview.configured[key] ? "Configured" : "Not configured"}</span></div>)}
+                   {Object.entries({ ai: "Primary AI", exa: "Exa search", browser: "Browser Use", whatsapp: "WhatsApp Cloud", google: "Google Workspace" }).map(([key, label]) => <div key={key} className="flex justify-between py-1"><span>{label}</span><span className={overview.configured[key] ? "text-emerald-600" : "text-neutral-400"}>{overview.configured[key] ? "Configured" : "Not configured"}</span></div>)}
+                   {Object.entries(connectionChecks).map(([key, value]) => <div key={key} className="flex justify-between gap-3 border-t border-black/5 py-1"><span>{key}</span><span className="text-right text-neutral-500">{value}</span></div>)}
                 </div>
               </div>
             )}
@@ -138,7 +174,7 @@ export function AdminConsole({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "controls" && (
               <div className="animate-soft-in max-w-2xl space-y-7">
-                <div>
+                 <div>
                   <h2 className="text-[18px] font-semibold text-neutral-900">Client access and portal notice</h2>
                   <p className="mt-1 text-[13px] leading-relaxed text-neutral-500">Generate a replacement client PIN or publish a short notice to the protected portal.</p>
                   <button type="button" onClick={rotatePin} disabled={busy} className="mt-4 rounded-xl bg-[#1473ff] px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50">Generate client PIN</button>
@@ -147,8 +183,18 @@ export function AdminConsole({ onLogout }: { onLogout: () => void }) {
                 <div>
                   <label className="mb-1.5 block text-[12px] font-medium text-neutral-600" htmlFor="portal-notice">Portal notice</label>
                   <textarea id="portal-notice" rows={4} value={notice} onChange={(event) => setNotice(event.target.value)} placeholder="Example: biometric appointments are being reviewed today." className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-[13px] outline-none focus:border-[#1473ff]" />
-                  <button type="button" onClick={saveNotice} disabled={busy} className="mt-3 rounded-xl border border-black/10 px-4 py-2.5 text-[13px] text-neutral-700 hover:bg-black/5 disabled:opacity-50">Save notice</button>
-                </div>
+                   <button type="button" onClick={saveNotice} disabled={busy} className="mt-3 rounded-xl border border-black/10 px-4 py-2.5 text-[13px] text-neutral-700 hover:bg-black/5 disabled:opacity-50">Save notice</button>
+                 </div>
+                 <div>
+                   <label className="mb-1.5 block text-[12px] font-medium text-neutral-600" htmlFor="offer-title">Client limited offer</label>
+                   <div className="grid gap-3 sm:grid-cols-2">
+                     <input id="offer-title" value={offer.title} onChange={(event) => setOffer((current) => ({ ...current, title: event.target.value }))} placeholder="Offer title" className="rounded-xl border border-black/10 px-3 py-2.5 text-[13px] outline-none focus:border-[#1473ff]" />
+                     <input value={offer.cta} onChange={(event) => setOffer((current) => ({ ...current, cta: event.target.value }))} placeholder="Button label" className="rounded-xl border border-black/10 px-3 py-2.5 text-[13px] outline-none focus:border-[#1473ff]" />
+                   </div>
+                   <textarea rows={3} value={offer.description} onChange={(event) => setOffer((current) => ({ ...current, description: event.target.value }))} placeholder="Offer description" className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2.5 text-[13px] outline-none focus:border-[#1473ff]" />
+                   <label className="mt-3 flex items-center gap-2 text-[12px] text-neutral-600"><input type="checkbox" checked={offer.enabled} onChange={(event) => setOffer((current) => ({ ...current, enabled: event.target.checked }))} /> Show in client portal</label>
+                   <button type="button" onClick={saveOffer} disabled={busy} className="mt-3 rounded-xl border border-black/10 px-4 py-2.5 text-[13px] text-neutral-700 hover:bg-black/5 disabled:opacity-50">Save client offer</button>
+                 </div>
               </div>
             )}
             {message && <div className="mt-6 max-w-2xl rounded-xl bg-[#f7f7f7] px-3 py-2 text-[12.5px] text-neutral-600">{message}</div>}

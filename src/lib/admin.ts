@@ -5,8 +5,19 @@ export type AdminSettings = {
   primaryAiKey: string;
   exaApiKey: string;
   browserUseApiKey: string;
+  browserUseUrl: string;
+  googleClientId: string;
+  awsMarketplaceUrl: string;
   whatsappToken: string;
   whatsappPhoneId: string;
+};
+
+export type AdminOffer = {
+  id: string;
+  title: string;
+  description: string;
+  cta: string;
+  enabled: boolean;
 };
 
 export async function saveAdminSettings(settings: AdminSettings) {
@@ -48,4 +59,24 @@ export async function savePortalNotice(notice: string) {
     body: JSON.stringify({ notice }),
   });
   if (!response.ok) throw new Error("Portal notice could not be saved.");
+}
+
+export async function saveAdminOffer(offer: AdminOffer) {
+  if (!APP_CONFIG.apiBaseUrl) return { saved: true };
+  const response = await fetch(apiUrl("/api/admin/offers"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSessionToken("admin")}` },
+    body: JSON.stringify({ offers: [offer] }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) throw new Error(body.error || "Offer could not be saved.");
+  return body;
+}
+
+export async function testAdminConnections() {
+  if (!APP_CONFIG.apiBaseUrl) return { checkedAt: new Date().toISOString(), configured: {}, checks: {} };
+  const response = await fetch(apiUrl("/api/admin/test"), { method: "POST", headers: { Authorization: `Bearer ${getSessionToken("admin")}` } });
+  const body = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) throw new Error(body.error || "Connection test could not be completed.");
+  return body as { checkedAt: string; configured: Record<string, boolean>; checks: Record<string, string> };
 }

@@ -16,6 +16,7 @@ export function Sidebar({
   onOpenVisaSkills,
   onOpenStudio,
   onOpenChecklist,
+  onOpenServices,
   installAvailable,
   realtimeStatus,
 }: {
@@ -30,6 +31,7 @@ export function Sidebar({
   onOpenVisaSkills: () => void;
   onOpenStudio: () => void;
   onOpenChecklist: () => void;
+  onOpenServices: () => void;
   installAvailable: boolean;
   realtimeStatus: RealtimeStatus;
 }) {
@@ -126,6 +128,10 @@ export function Sidebar({
         <button type="button" onClick={onOpenChecklist} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5">
           <IconLayout size={14} className="text-neutral-500" />
           <span>Visa checklist</span>
+        </button>
+        <button type="button" onClick={onOpenServices} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-neutral-700 hover:bg-black/5">
+          <IconDocTab size={14} className="text-neutral-500" />
+          <span>Client services + PDFs</span>
         </button>
         <button
           type="button"

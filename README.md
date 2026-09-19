@@ -2,7 +2,7 @@
 
 A three-pane AI workspace for research, artifacts, visa-agency operations, and guarded browser workflows.
 
-VisaMOTion AI includes persistent projects, live room presence, a read-only Google Drive scan, an installable PWA for mobile and desktop, structured visa dossiers, source URL requirements, printable PDF output, and Markdown document download.
+VisaMOTion AI includes persistent projects, live room presence, a read-only Google Drive scan, an installable PWA for mobile and desktop, structured visa dossiers, source URL requirements, printable PDF output, Markdown document download, client-facing visa routes, limited offers, and an in-app PDF library.
 
 The client gateway uses the requested preview PIN `666085`. The admin console is available at `/admin` on the Node deployment or `?admin=1` on the static page and uses preview PIN `132313`. Set `CLIENT_ACCESS_PIN` and `ADMIN_MASTER_PIN` in production; never rely on the preview defaults for a real deployment.
 
@@ -22,13 +22,14 @@ Open `http://localhost:8787`.
 
 - `GEMINI_API_KEY` stays server-side and is never bundled into the browser.
 - `BROWSER_USE_MCP_URL` points to the deployed Browser Use MCP server. `BROWSER_USE_MCP_TOOL` selects its browser-agent tool.
+- `BROWSER_USE_API_KEY` is sent server-side when the Browser Use MCP endpoint requires bearer authentication.
 - `AWS_MARKETPLACE_MCP_URL` defaults to the official AWS Marketplace MCP endpoint and is proxied through `/api/mcp/aws-marketplace`.
-- `VITE_GOOGLE_CLIENT_ID` enables the sidebar's read-only Google Workspace scan. The user grants Drive read access in the browser; access tokens are not stored.
+- `GOOGLE_CLIENT_ID` can be entered from the protected admin key-store and enables the client portal's read-only Google Workspace scan. `VITE_GOOGLE_CLIENT_ID` remains available for a build-time value. The user grants Drive read access in the browser; access tokens are not stored.
 - `ALLOWED_ORIGIN` should be set to the exact public app origin instead of `*` for a locked-down deployment.
 - `VITE_API_BASE_URL` is the public URL of this server when the UI and API are deployed separately.
 - `CLIENT_ACCESS_PIN` and `ADMIN_MASTER_PIN` are server-side access controls for the client and admin gateways.
 
-`render.yaml` is included for a Node web service deployment. The service exposes `/api/health`, streams the configured AI provider, proxies the allow-listed AWS Marketplace MCP tools, supports live visa research through Browser Use MCP, scans Google Drive with a temporary token, and keeps browser automation behind the server.
+`render.yaml` is included for a Node web service deployment. The service exposes `/api/health`, streams the configured AI provider, proxies the allow-listed AWS Marketplace MCP tools, supports live visa research through Browser Use MCP, scans Google Drive with a temporary token, exposes admin-controlled client offers and portal notices, and keeps browser automation behind the server.
 
 ## Safety boundary
 

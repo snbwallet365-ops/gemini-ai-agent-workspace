@@ -8,17 +8,26 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
-const awsMarketplaceUrl = process.env.AWS_MARKETPLACE_MCP_URL || "https://marketplace-mcp.us-east-1.api.aws/mcp";
+let awsMarketplaceUrl = process.env.AWS_MARKETPLACE_MCP_URL || "https://marketplace-mcp.us-east-1.api.aws/mcp";
 const browserUseTool = process.env.BROWSER_USE_MCP_TOOL || "run_browser_agent";
 const runtimeSecrets = {
   primaryAiKey: process.env.GEMINI_API_KEY || "",
   exaApiKey: process.env.EXA_API_KEY || "",
   browserUseApiKey: process.env.BROWSER_USE_API_KEY || "",
   browserUseUrl: process.env.BROWSER_USE_MCP_URL || "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   whatsappToken: process.env.WHATSAPP_CLOUD_TOKEN || "",
   whatsappPhoneId: process.env.WHATSAPP_PHONE_ID || "",
 };
-const runtimeSettings = { clientPin: process.env.CLIENT_ACCESS_PIN || "666085", adminPin: process.env.ADMIN_MASTER_PIN || "132313", notice: "" };
+const runtimeSettings = {
+  clientPin: process.env.CLIENT_ACCESS_PIN || "666085",
+  adminPin: process.env.ADMIN_MASTER_PIN || "132313",
+  notice: "Official-source verification and human review are required before any submission.",
+  offers: [
+    { id: "route-review", title: "Limited offer · Initial route review", description: "One structured route and document-gap review for a new client file.", cta: "Request route review", enabled: true },
+    { id: "sop-review", title: "Limited offer · SOP studio review", description: "Draft an SOP or cover letter from client-provided facts, then prepare it for human review.", cta: "Open SOP studio", enabled: true },
+  ],
+};
 const sessions = new Map();
 
 const SYSTEM = `You are the production agent inside VisaMOTion AI. Work directly and carefully.
@@ -82,6 +91,7 @@ function configuredStatus() {
     exa: Boolean(runtimeSecrets.exaApiKey),
     browser: Boolean(runtimeSecrets.browserUseApiKey || runtimeSecrets.browserUseUrl),
     whatsapp: Boolean(runtimeSecrets.whatsappToken && runtimeSecrets.whatsappPhoneId),
+    google: Boolean(runtimeSecrets.googleClientId),
   };
 }
 
@@ -101,7 +111,25 @@ async function handleAdminConfig(req, res) {
   for (const key of Object.keys(runtimeSecrets)) {
     if (typeof input[key] === "string" && input[key].trim()) runtimeSecrets[key] = input[key].trim();
   }
+  if (typeof input.awsMarketplaceUrl === "string" && input.awsMarketplaceUrl.trim()) awsMarketplaceUrl = input.awsMarketplaceUrl.trim();
   return sendJson(res, 200, { stored: "server-memory", configured: configuredStatus() });
+}
+
+async function handleAdminTest(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  const configured = configuredStatus();
+  return sendJson(res, 200, {
+    checkedAt: new Date().toISOString(),
+    configured,
+    checks: {
+      "Primary AI": configured.ai ? "Server key present" : "Needs GEMINI_API_KEY",
+      "Exa search": configured.exa ? "Server key present" : "Needs EXA_API_KEY",
+      "Browser Use": configured.browser ? "Endpoint/key present" : "Needs Browser Use endpoint or key",
+      "WhatsApp Cloud": configured.whatsapp ? "Token and phone ID present" : "Needs token and phone ID",
+      "Google Workspace": configured.google ? "OAuth client configured" : "Needs Google OAuth client ID",
+      "AWS Marketplace MCP": awsMarketplaceUrl ? "Endpoint configured" : "Needs MCP endpoint",
+    },
+  });
 }
 
 async function handleAdminClientPin(req, res) {
@@ -115,6 +143,35 @@ async function handleAdminNotice(req, res) {
   const input = await body(req);
   runtimeSettings.notice = String(input.notice || "").slice(0, 1000);
   return sendJson(res, 200, { saved: true });
+}
+
+async function handleAdminOffers(req, res) {
+  if (!requireSession(req, res, "admin")) return;
+  const input = await body(req);
+  if (!Array.isArray(input.offers)) return sendJson(res, 400, { error: "An offers array is required." });
+  const updates = input.offers.map((offer) => ({
+    id: String(offer.id || randomUUID()),
+    title: String(offer.title || "Limited offer").slice(0, 120),
+    description: String(offer.description || "").slice(0, 500),
+    cta: String(offer.cta || "Request review").slice(0, 60),
+    enabled: offer.enabled !== false,
+  }));
+  for (const update of updates) {
+    const index = runtimeSettings.offers.findIndex((offer) => offer.id === update.id);
+    if (index >= 0) runtimeSettings.offers[index] = update;
+    else runtimeSettings.offers.push(update);
+  }
+  return sendJson(res, 200, { saved: true, offers: runtimeSettings.offers });
+}
+
+async function handlePortalSummary(req, res) {
+  if (!requireSession(req, res, "client")) return;
+  return sendJson(res, 200, {
+    notice: runtimeSettings.notice,
+    offers: runtimeSettings.offers,
+    googleClientId: runtimeSecrets.googleClientId || "",
+    documents: [{ id: "insus-guide", title: "INSUS Visa Operations service guide", description: "Client journey, document workflow, advisor gate and operational overview.", url: "/insus-service-guide.pdf", kind: "pdf" }],
+  });
 }
 
 async function mcpRequest(method, params = {}) {
@@ -207,7 +264,7 @@ async function handleBrowser(req, res) {
   if (!task) return sendJson(res, 400, { error: "A browser task is required." });
   const response = await fetch(runtimeSecrets.browserUseUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" },
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18", ...(runtimeSecrets.browserUseApiKey ? { Authorization: `Bearer ${runtimeSecrets.browserUseApiKey}` } : {}) },
     body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: browserUseTool, arguments: { task } } }),
   });
   const text = await response.text();
@@ -223,7 +280,7 @@ async function handleVisaResearch(req, res) {
   const guardedTask = `You are the live research worker for VisaMOTion AI. Research only current official immigration authorities, embassy or consulate portals, official missions, and authorized VAC sites such as VFS Global, TLScontact, or BLS International. Never use memory to invent fees, processing windows, photo dimensions, eligibility, or document rules. Return a structured visa dossier with the exact source URL beside each volatile claim, clearly separate mandatory documents from supporting evidence, show fee calculations, and end with this exact advisory: Consular authorities hold sole discretionary authority over visa issuance, interviews, and supplemental-document requests. Consular fees, visa requirements, and processing durations may change without prior notice. Stop before any login, upload, payment, declaration, or submission. User brief: ${task}`;
   const response = await fetch(runtimeSecrets.browserUseUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" },
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18", ...(runtimeSecrets.browserUseApiKey ? { Authorization: `Bearer ${runtimeSecrets.browserUseApiKey}` } : {}) },
     body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: browserUseTool, arguments: { task: guardedTask } } }),
   });
   const text = await response.text();
@@ -296,13 +353,16 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
     if (req.method === "GET" && req.url === "/api/health") {
-      return sendJson(res, 200, { ok: true, service: "visamotion-ai", capabilities: { ai: Boolean(runtimeSecrets.primaryAiKey), awsMarketplaceMcp: true, browserUseMcp: Boolean(runtimeSecrets.browserUseUrl), googleWorkspace: true } });
+      return sendJson(res, 200, { ok: true, service: "visamotion-ai", capabilities: { ai: Boolean(runtimeSecrets.primaryAiKey), awsMarketplaceMcp: Boolean(awsMarketplaceUrl), browserUseMcp: Boolean(runtimeSecrets.browserUseUrl), googleWorkspace: Boolean(runtimeSecrets.googleClientId) } });
     }
     if (req.method === "POST" && req.url === "/api/auth/login") return await handleLogin(req, res);
     if (req.method === "GET" && req.url === "/api/admin/overview") return await handleAdminOverview(req, res);
     if (req.method === "POST" && req.url === "/api/admin/config") return await handleAdminConfig(req, res);
+    if (req.method === "POST" && req.url === "/api/admin/test") return await handleAdminTest(req, res);
     if (req.method === "POST" && req.url === "/api/admin/client-pin") return await handleAdminClientPin(req, res);
     if (req.method === "POST" && req.url === "/api/admin/notice") return await handleAdminNotice(req, res);
+    if (req.method === "POST" && req.url === "/api/admin/offers") return await handleAdminOffers(req, res);
+    if (req.method === "GET" && req.url === "/api/portal/summary") return await handlePortalSummary(req, res);
     if (req.method === "POST" && req.url === "/api/agent/chat") return await handleGemini(req, res);
     if (req.method === "POST" && req.url === "/api/mcp/aws-marketplace") return await handleMcp(req, res);
     if (req.method === "POST" && req.url === "/api/browser/run") return await handleBrowser(req, res);

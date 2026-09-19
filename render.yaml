@@ -24,6 +24,10 @@ services:
         sync: false
       - key: BROWSER_USE_MCP_TOOL
         value: run_browser_agent
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: AWS_MARKETPLACE_MCP_URL
+        value: https://marketplace-mcp.us-east-1.api.aws/mcp
       - key: ALLOWED_ORIGIN
         value: "*"
       - key: VITE_GOOGLE_CLIENT_ID

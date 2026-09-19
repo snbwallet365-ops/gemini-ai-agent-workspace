@@ -5,6 +5,7 @@ import { AdminConsole } from "./components/AdminConsole";
 import { ChatPanel } from "./components/ChatPanel";
 import { ChecklistModal } from "./components/ChecklistModal";
 import { ClientStudioModal } from "./components/ClientStudioModal";
+import { ClientServicesModal } from "./components/ClientServicesModal";
 import { getStoredModel } from "./components/Composer";
 import { GoogleWorkspaceModal } from "./components/GoogleWorkspaceModal";
 import { SettingsModal } from "./components/SettingsModal";
@@ -50,6 +51,7 @@ function WorkspaceApp() {
   const [workspaceScanOpen, setWorkspaceScanOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const [installAvailable, setInstallAvailable] = useState(false);
   const [installNotice, setInstallNotice] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
@@ -130,6 +132,13 @@ function WorkspaceApp() {
 
   const openFile = (artifactId: string) => {
     patch(project.id, (p) => ({ ...p, activeArtifactId: artifactId }));
+    setPreviewOpen(true);
+  };
+
+  const openClientArtifact = (projectId: string, artifactId: string) => {
+    setActiveId(projectId);
+    patch(projectId, (p) => ({ ...p, activeArtifactId: artifactId }));
+    setServicesOpen(false);
     setPreviewOpen(true);
   };
 
@@ -293,6 +302,7 @@ function WorkspaceApp() {
             }}
             onOpenStudio={() => setStudioOpen(true)}
             onOpenChecklist={() => setChecklistOpen(true)}
+            onOpenServices={() => setServicesOpen(true)}
             installAvailable={installAvailable}
             realtimeStatus={realtimeStatus}
           />
@@ -328,6 +338,7 @@ function WorkspaceApp() {
       {workspaceScanOpen && <GoogleWorkspaceModal onClose={() => setWorkspaceScanOpen(false)} />}
       {studioOpen && <ClientStudioModal onClose={() => setStudioOpen(false)} onGenerate={(prompt) => { setStudioOpen(false); void send(prompt); }} />}
       {checklistOpen && <ChecklistModal onClose={() => setChecklistOpen(false)} />}
+      {servicesOpen && <ClientServicesModal projects={projects} onClose={() => setServicesOpen(false)} onStartCase={(prompt) => { setServicesOpen(false); void send(prompt); }} onOpenArtifact={openClientArtifact} />}
       {installNotice && <div className="fixed right-4 bottom-4 z-40 max-w-sm rounded-xl bg-neutral-900 px-4 py-3 text-[13px] text-white shadow-xl">{installNotice}</div>}
     </div>
   );

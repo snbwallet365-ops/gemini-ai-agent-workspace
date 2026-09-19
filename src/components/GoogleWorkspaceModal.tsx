@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { APP_CONFIG } from "../lib/config";
 import { scanGoogleWorkspace, type WorkspaceScan } from "../lib/googleWorkspace";
+import { getPortalSummary } from "../lib/portal";
 import { IconClose, IconCloud } from "./Icons";
 
 type TokenClient = {
@@ -42,16 +43,14 @@ export function GoogleWorkspaceModal({ onClose }: { onClose: () => void }) {
 
   const connectAndScan = async () => {
     setError("");
-    if (!APP_CONFIG.googleClientId) {
-      setError("Add VITE_GOOGLE_CLIENT_ID to the public build before connecting Google Workspace.");
-      return;
-    }
     setBusy(true);
     try {
+      const configuredClientId = APP_CONFIG.googleClientId || (await getPortalSummary()).googleClientId || "";
+      if (!configuredClientId) throw new Error("Add a Google OAuth client ID in Admin or the public build before connecting Google Workspace.");
       await loadGoogleIdentity();
       const token = await new Promise<string>((resolve, reject) => {
         const request = window.google?.accounts?.oauth2?.initTokenClient({
-          client_id: APP_CONFIG.googleClientId,
+            client_id: configuredClientId,
           scope: "https://www.googleapis.com/auth/drive.readonly",
           callback: (response) => (response.access_token ? resolve(response.access_token) : reject(new Error(response.error || "Google sign-in was cancelled."))),
         });
