@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: gemini-ai-agent-workspace
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: BROWSER_USE_MCP_URL
+        sync: false
+      - key: BROWSER_USE_MCP_TOOL
+        value: run_browser_agent
+      - key: ALLOWED_ORIGIN
+        value: "*"
